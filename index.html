@@ -5,7 +5,13 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
 <title>Mi Plata</title>
 <meta name="theme-color" content="#04060F" id="theme-color-meta"/>
-<link rel="manifest" href="data:application/json,{%22name%22:%22Mi%20Plata%22,%22short_name%22:%22MiPlata%22,%22display%22:%22standalone%22,%22background_color%22:%22%2304060F%22,%22theme_color%22:%22%2304060F%22}"/>
+<link rel="manifest" href="manifest.json"/>
+<meta name="mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+<meta name="apple-mobile-web-app-title" content="MiPlata"/>
+<link rel="icon" type="image/png" sizes="32x32" href="favicon.ico"/>
+<link rel="apple-touch-icon" href="icon-192.png"/>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet"/>
 <style>
@@ -900,6 +906,65 @@ mark{background:rgba(11,245,160,.22);color:var(--g);border-radius:3px;padding:0 
   to  {opacity:1;transform:translateX(-50%) translateY(0)    scale(1);}
 }
 .toast.out{opacity:0;transform:translateX(-50%) translateY(10px);}
+
+/* ══════════════════════════════════════
+   SPLASH SCREEN
+══════════════════════════════════════ */
+#splash{
+  position:fixed;inset:0;z-index:9999;
+  background:var(--bg);
+  display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:0;
+  transition:opacity .45s ease, visibility .45s ease;
+}
+#splash.hide{opacity:0;visibility:hidden;pointer-events:none;}
+.splash-logo{
+  font-family:var(--font);font-size:28px;font-weight:800;
+  color:var(--text-1);letter-spacing:-.02em;
+  display:flex;align-items:center;gap:8px;
+}
+.splash-logo span.g{color:var(--g);}
+.splash-ring{
+  width:72px;height:72px;margin-bottom:28px;
+  animation:splashSpin 1s cubic-bezier(.6,0,.4,1) infinite;
+}
+@keyframes splashSpin{
+  0%  {transform:rotate(0deg);}
+  100%{transform:rotate(360deg);}
+}
+.splash-sub{
+  margin-top:10px;font-size:12px;font-weight:600;
+  color:var(--text-3);letter-spacing:.06em;text-transform:uppercase;
+  animation:splashPulse 1.4s ease-in-out infinite;
+}
+@keyframes splashPulse{
+  0%,100%{opacity:.4;}50%{opacity:1;}
+}
+/* Partículas de checkmark al guardar */
+@keyframes burst{
+  0%  {transform:translate(0,0) scale(1);opacity:1;}
+  100%{transform:translate(var(--tx),var(--ty)) scale(0);opacity:0;}
+}
+.save-particle{
+  position:fixed;width:8px;height:8px;border-radius:50%;
+  background:var(--g);pointer-events:none;z-index:9000;
+  animation:burst .55s cubic-bezier(.22,.68,0,1) forwards;
+}
+/* Checkmark overlay al guardar */
+@keyframes checkPop{
+  0%  {transform:translate(-50%,-50%) scale(0);opacity:0;}
+  55% {transform:translate(-50%,-50%) scale(1.18);opacity:1;}
+  80% {transform:translate(-50%,-50%) scale(.95);opacity:1;}
+  100%{transform:translate(-50%,-50%) scale(1);opacity:0;}
+}
+.save-check{
+  position:fixed;top:50%;left:50%;
+  width:72px;height:72px;border-radius:50%;
+  background:var(--g);color:#020810;
+  font-size:32px;line-height:72px;text-align:center;
+  pointer-events:none;z-index:9001;
+  animation:checkPop .6s cubic-bezier(.22,.68,0,1.15) forwards;
+}
 
 /* ══════════════════════════════════════
    STAGGERED ENTRY ANIMATIONS
@@ -2400,16 +2465,34 @@ function saveExp(){
   }
 }
 function _doSaveExp(amount,desc,date,recurring){
-  const splitOffered=date===today(); // Only offer split for today's expenses
+  const splitOffered=date===today();
   dailyExp.push({id:Date.now(),cat:selCat,desc,amount,date,recurring,tags:[...selTags]});sv('daily',dailyExp);
   document.getElementById('e-amount').value='';document.getElementById('e-desc').value='';
   selTags=[];
   const rec=document.getElementById('e-recurring');rec.checked=false;rec.dispatchEvent(new Event('change'));
+
+  // ── Micro-animación: checkmark + partículas + háptico ──
+  if(navigator.vibrate)navigator.vibrate([12,8,20]);
+  // Checkmark central
+  const chk=document.createElement('div');chk.className='save-check';chk.textContent='✓';
+  document.body.appendChild(chk);setTimeout(()=>chk.remove(),650);
+  // Botón guardar: bounce
   const btn=document.querySelector('#sc-add .btn-g');
-  if(btn){btn.style.transform='scale(1.04)';btn.style.boxShadow='0 0 40px var(--g-glow-strong)';setTimeout(()=>{btn.style.transform='';btn.style.boxShadow='';},250);}
+  if(btn){btn.style.transform='scale(1.06)';btn.style.boxShadow='0 0 48px var(--g-glow-strong)';setTimeout(()=>{btn.style.transform='';btn.style.boxShadow='';},300);}
+  // Partículas desde el botón
+  const bRect=btn?btn.getBoundingClientRect():null;
+  const ox=bRect?(bRect.left+bRect.width/2):window.innerWidth/2;
+  const oy=bRect?(bRect.top+bRect.height/2):window.innerHeight/2;
+  const cols=['#0BF5A0','#3D8EFF','#A78BFF','#FFB340'];
+  for(let i=0;i<14;i++){
+    const p=document.createElement('div');p.className='save-particle';
+    const angle=Math.random()*Math.PI*2, dist=40+Math.random()*70;
+    p.style.cssText=`left:${ox}px;top:${oy}px;width:${5+Math.random()*5}px;height:${5+Math.random()*5}px;background:${cols[i%cols.length]};--tx:${Math.cos(angle)*dist}px;--ty:${Math.sin(angle)*dist}px;animation-delay:${Math.random()*0.08}s;`;
+    document.body.appendChild(p);setTimeout(()=>p.remove(),700);
+  }
+
   buildTagChips();renderAdd();renderHome();
   if(splitOffered){
-    // Show toast with split option
     const t=document.createElement('div');t.className='toast';
     t.innerHTML=`Guardado ✓ &nbsp;<span onclick="openSplitModal(${amount},'${selCat}','${desc.replace(/'/g,"\\'")}','${date}',${recurring},[])" style="text-decoration:underline;cursor:pointer;font-weight:700">Dividir</span>`;
     document.body.appendChild(t);
@@ -2485,7 +2568,8 @@ function renderHome(){
   document.getElementById('s-month-lbl').textContent=mLbl(now);
 
   const fEl=document.getElementById('h-free');
-  fEl.textContent=fmt(leftFree);fEl.className='hero-amount'+(leftFree<0?' neg':'');
+  fEl.className='hero-amount'+(leftFree<0?' neg':'');
+  animTicker(fEl, leftFree, 600);
 
   // Progress ring
   const circumference=125.66;
@@ -2503,8 +2587,10 @@ function renderHome(){
   document.getElementById('h-progress-sub').textContent=pctSpentOfFree+'% del margen libre usado';
 
   document.getElementById('h-caption').textContent='Fijos: '+fmt(fixedTot)+(superBudget>0?'  ·  Super: '+fmt(superBudget):'');
-  document.getElementById('h-daily').textContent=rolling>0?fmt(Math.round(rolling)):'$0';
-  document.getElementById('h-spent').textContent=fmt(nonSuperSpent);
+  const dailyEl=document.getElementById('h-daily');
+  animTicker(dailyEl, rolling>0?Math.round(rolling):0, 520);
+  const spentEl=document.getElementById('h-spent');
+  animTicker(spentEl, nonSuperSpent, 520);
   document.getElementById('h-days').textContent=dLeft+' días restantes';
 
   const todayExps=mExp.filter(e=>e.date===today());
@@ -3790,6 +3876,17 @@ function saveQuick(){
     const ico=c.label.match(/\S+$/)[0];
     dailyExp.push({id:Date.now(),cat,desc,amount,date:today(),recurring:false,tags:[]});
     sv('daily',dailyExp);
+    // Micro-animación modo rápido
+    if(navigator.vibrate)navigator.vibrate([12,8,20]);
+    const chk=document.createElement('div');chk.className='save-check';chk.textContent='✓';
+    document.body.appendChild(chk);setTimeout(()=>chk.remove(),650);
+    const cols=['#0BF5A0','#3D8EFF','#A78BFF','#FFB340'];
+    for(let i=0;i<12;i++){
+      const p=document.createElement('div');p.className='save-particle';
+      const angle=Math.random()*Math.PI*2, dist=50+Math.random()*80;
+      p.style.cssText=`left:${window.innerWidth/2}px;top:${window.innerHeight/2}px;width:${5+Math.random()*5}px;height:${5+Math.random()*5}px;background:${cols[i%cols.length]};--tx:${Math.cos(angle)*dist}px;--ty:${Math.sin(angle)*dist}px;animation-delay:${Math.random()*0.08}s;`;
+      document.body.appendChild(p);setTimeout(()=>p.remove(),700);
+    }
     closeMod('mod-quick');renderHome();toast('⚡ '+ico+' '+fmt(amount)+' guardado');
   });
 }
@@ -3876,38 +3973,74 @@ function launchConfetti(){
   }
 }
 
-// ═══════════════ SPLASH ═══════════════
+// ═══════════════ TICKER ANIMADO ═══════════════
+function animTicker(el,targetVal,duration=520){
+  const startVal=parseFloat(el.dataset.tickerVal||'0')||0;
+  if(Math.round(startVal)===Math.round(targetVal)){
+    el.textContent='$'+Math.round(targetVal).toLocaleString('es-AR');
+    el.dataset.tickerVal=targetVal;
+    return;
+  }
+  const start=performance.now();
+  const isNeg=targetVal<0;
+  const absStart=Math.abs(startVal), absEnd=Math.abs(targetVal);
+  function step(now){
+    const p=Math.min((now-start)/duration,1);
+    const ease=p<0.5?2*p*p:(4-2*p)*p-1; // easeInOutQuad
+    const cur=absStart+(absEnd-absStart)*ease;
+    el.textContent=(isNeg?'-':'')+'$'+Math.round(cur).toLocaleString('es-AR');
+    if(p<1)requestAnimationFrame(step);
+    else{el.dataset.tickerVal=targetVal;}
+  }
+  requestAnimationFrame(step);
+}
 (function initSplash(){
   const splash=document.getElementById('splash');
   const arc=document.getElementById('splash-arc');
   const tagline=document.getElementById('splash-tagline');
   const totalDash=213.6;
 
-  // Count real stats for the tagline
   const gastos=dailyExp.length;
   const meses=[...new Set(dailyExp.map(e=>e.date.slice(0,7)))].length;
 
-  // Animate the ring filling up
+  // Partículas de confetti al completar el arco
+  function burst(){
+    const cx=window.innerWidth/2, cy=window.innerHeight/2;
+    const colors=['#0BF5A0','#3D8EFF','#A78BFF','#FFB340','#FF4060'];
+    for(let i=0;i<22;i++){
+      const el=document.createElement('div');
+      const angle=Math.random()*Math.PI*2;
+      const dist=60+Math.random()*90;
+      el.style.cssText=`position:fixed;left:${cx}px;top:${cy}px;width:${6+Math.random()*6}px;height:${6+Math.random()*6}px;border-radius:${Math.random()>0.5?'50%':'3px'};background:${colors[i%colors.length]};pointer-events:none;z-index:10000;--tx:${Math.cos(angle)*dist}px;--ty:${Math.sin(angle)*dist}px;animation:burst .6s cubic-bezier(.22,.68,0,1) ${Math.random()*0.12}s forwards;`;
+      document.body.appendChild(el);
+      setTimeout(()=>el.remove(),800);
+    }
+  }
+
+  // Vibración háptica al completar (si disponible)
+  function haptic(){if(navigator.vibrate)navigator.vibrate([18,10,8]);}
+
   let start=null;
-  const duration=900;
+  const duration=950;
   function animateArc(ts){
     if(!start)start=ts;
     const p=Math.min((ts-start)/duration,1);
     const ease=1-Math.pow(1-p,3);
     arc.style.strokeDashoffset=(totalDash*(1-ease)).toFixed(2);
-    if(p<1){requestAnimationFrame(animateArc);}
-    else{
-      // Update tagline with real data
-      if(gastos>0){
-        tagline.textContent=gastos+' gasto'+(gastos!==1?'s':'')+' en '+meses+' mes'+(meses!==1?'es':'')+' 💚';
-      } else {
-        tagline.textContent='¡Bienvenido! Empezá a anotar 🚀';
-      }
-      // Dismiss after a beat
+    if(p<1){
+      requestAnimationFrame(animateArc);
+    } else {
+      haptic();
+      burst();
+      tagline.textContent=gastos>0
+        ?gastos+' gasto'+(gastos!==1?'s':'')+' en '+meses+' mes'+(meses!==1?'es':'')+' 💚'
+        :'¡Bienvenido! Empezá a anotar 🚀';
+      tagline.style.animation='splashPulse .0s';  // detiene el pulse
+      tagline.style.opacity='1';
       setTimeout(()=>{
         splash.classList.add('out');
         setTimeout(()=>{splash.style.display='none';},460);
-      },600);
+      },680);
     }
   }
   requestAnimationFrame(animateArc);
@@ -3937,6 +4070,51 @@ renderHome();renderCfg();
 checkMonthEnd();
 checkPwaReminder();
 checkOnboarding();
+
+// ═══════════════ SERVICE WORKER ═══════════════
+if('serviceWorker' in navigator){
+  window.addEventListener('load',()=>{
+    navigator.serviceWorker.register('./sw.js').catch(err=>console.warn('SW error:',err));
+  });
+}
+
+// ═══════════════ INSTALL PROMPT (PWA) ═══════════════
+let _installEvt=null;
+(function(){
+  const s=document.createElement('style');
+  s.textContent=`
+    #pwa-install-btn{
+      display:none;position:fixed;bottom:80px;right:16px;z-index:9999;
+      background:var(--g);color:#020810;border:none;border-radius:var(--rad-pill);
+      padding:12px 20px;font-family:var(--font);font-size:13px;font-weight:800;
+      cursor:pointer;box-shadow:0 4px 24px rgba(11,245,160,.40);
+      animation:pulse-install 2.5s ease-in-out infinite;
+      gap:6px;align-items:center;
+    }
+    #pwa-install-btn.show{display:flex;}
+    @keyframes pulse-install{
+      0%,100%{box-shadow:0 4px 24px rgba(11,245,160,.40);}
+      50%{box-shadow:0 4px 36px rgba(11,245,160,.70);}
+    }
+  `;
+  document.head.appendChild(s);
+  const btn=document.createElement('button');
+  btn.id='pwa-install-btn';btn.innerHTML='📲 Instalar app';
+  document.body.appendChild(btn);
+  window.addEventListener('beforeinstallprompt',e=>{
+    e.preventDefault();_installEvt=e;btn.classList.add('show');
+  });
+  btn.addEventListener('click',async()=>{
+    if(!_installEvt)return;
+    _installEvt.prompt();
+    const{outcome}=await _installEvt.userChoice;
+    if(outcome==='accepted')btn.classList.remove('show');
+    _installEvt=null;
+  });
+  window.addEventListener('appinstalled',()=>{
+    btn.classList.remove('show');_installEvt=null;
+  });
+})();
 
 </script>
 </body>
