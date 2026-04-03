@@ -2634,14 +2634,6 @@ const MN   =['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','
 const mLbl =d=>MN[d.getMonth()]+' '+d.getFullYear();
 
 // ═══════════════ RECURRING ═══════════════
-// Si venimos de un borrado, garantizar localStorage limpio (sessionStorage sobrevive reload)
-if(sessionStorage.getItem('mi-plata-cleared')){
-  localStorage.clear();
-  sessionStorage.removeItem('mi-plata-cleared');
-  // Resetear variables en memoria que ya se leyeron arriba
-  income=0;superBudget=0;fixedExp=[];dailyExp=[];incomeSources=[];goals=[];catBudgets={};
-  CATS=[...DEFAULT_CATS];
-}
 function applyRecurring(){
   const now=new Date(),mk=mkey(now);
   const applied=ld('rec-applied-'+mk,[]);
@@ -2816,27 +2808,24 @@ function _doSaveExp(amount,desc,date,recurring){
 function delExp(id){dailyExp=dailyExp.filter(e=>e.id!==id);sv('daily',dailyExp);renderAdd();renderHome();}
 async function clearAll(){
   if(!confirm('¿Borrar todos los datos? Empezás de cero.'))return;
-  // 1. Marcar ANTES de borrar para sobrevivir el reload
-  sessionStorage.setItem('mi-plata-cleared','1');
-  // 2. Borrar localStorage completamente
-  localStorage.clear();
-  // 3. Limpiar caché del Service Worker
+  // 1. Limpiar caché del Service Worker
   if('caches' in window){
     try{
       const keys = await caches.keys();
       await Promise.all(keys.map(k=>caches.delete(k)));
     }catch(e){console.warn('Cache clear error:',e);}
   }
-  // 4. Desregistrar Service Worker para que no sirva caché vieja
+  // 2. Desregistrar Service Worker
   if('serviceWorker' in navigator){
     try{
       const regs = await navigator.serviceWorker.getRegistrations();
       await Promise.all(regs.map(r=>r.unregister()));
     }catch(e){console.warn('SW unregister error:',e);}
   }
-  // 5. Resetear estado en memoria
-  income=0;superBudget=0;fixedExp=[];dailyExp=[];incomeSources=[];goals=[];catBudgets={};
-  // 6. Recargar limpio (sessionStorage sobrevive al reload)
+  // 3. Borrar localStorage y dejar solo la flag que evita que vuelvan los datos demo
+  localStorage.clear();
+  sv('app-used', true);
+  // 4. Recargar
   setTimeout(()=>location.reload(),300);
 }
 
@@ -4191,7 +4180,10 @@ function checkPwaReminder(){
 // ═══════════════ INIT ═══════════════
 buildChips('fc-chips',FCATS,'tarjeta',id=>selFCat=id);
 
-if(dailyExp.length===0&&income===0){
+// Los datos de demo solo se cargan la PRIMERA vez que alguien abre la app.
+// Una vez que el usuario borra todo (clearAll), se guarda 'app-used' y nunca más se vuelven a inyectar.
+if(dailyExp.length===0&&income===0&&!ld('app-used',false)){
+  sv('app-used',true);
   income=817314;superBudget=125000;sv('income',income);sv('superBudget',superBudget);
   fixedExp=[{id:1,cat:'tarjeta',name:'Tarjeta de crédito',amount:200000},{id:2,cat:'luz',name:'Luz',amount:33000},{id:3,cat:'internet',name:'Internet',amount:20000},{id:4,cat:'streaming',name:'Netflix',amount:16000}];
   const now=new Date(),mk=mkey(now),prevMk=mkey(new Date(now.getFullYear(),now.getMonth()-1,1));
@@ -4569,7 +4561,7 @@ if(incomeSources.length===0&&income>0){
   sv('incomeSources',incomeSources);
 }
 
-// Seed demo goals if none (solo si hay gastos reales, nunca en pantalla limpia)
+// Seed demo goals if none
 if(goals.length===0&&dailyExp.length>0){
   goals=[{id:1,name:'Vacaciones',emoji:'✈️',target:300000,saved:85000,deadline:'2025-12-01'}];
   sv('goals',goals);
