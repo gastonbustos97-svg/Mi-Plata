@@ -1539,20 +1539,87 @@ html.light .me-stat-val{color:var(--text-1);}
 .hero-vs.better{background:var(--g-soft);color:var(--g);}
 .hero-vs.worse{background:var(--r-soft);color:var(--r);}
 .hero-vs.neutral{background:var(--surface-1);color:var(--text-3);}
-/* Hero projection badge */
-.hero-proj{
-  display:inline-flex;align-items:center;gap:6px;
-  font-size:11px;font-weight:600;
-  padding:5px 12px;border-radius:var(--rad-pill);
-  margin-top:7px;line-height:1.4;
-  border:1px solid transparent;
+/* ── Proyección fin de mes (hero) ── */
+.proj-card{
+  margin-top:14px;padding:14px 16px;
+  border-radius:var(--rad-lg);
+  border:1px solid var(--border-1);
+  background:var(--surface-0);
 }
-.hero-proj strong{font-weight:800;}
-.hero-proj.better{background:var(--g-soft);border-color:var(--g-border);color:var(--g);}
-.hero-proj.worse{background:var(--r-soft);border-color:var(--r-border);color:var(--r);}
-.hero-proj.neutral{background:var(--surface-1);border-color:var(--border-1);color:var(--text-2);}
-/* Projection badge */
+.proj-card-header{
+  display:flex;align-items:center;justify-content:space-between;
+  margin-bottom:10px;
+}
+.proj-card-title{
+  font-size:9.5px;font-weight:700;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--text-3);
+  display:flex;align-items:center;gap:6px;
+}
+.proj-card-badge{
+  font-size:11px;font-weight:700;padding:3px 10px;
+  border-radius:var(--rad-pill);border:1px solid transparent;
+}
+.proj-card-badge.better{background:var(--g-soft);border-color:var(--g-border);color:var(--g);}
+.proj-card-badge.worse{background:var(--r-soft);border-color:var(--r-border);color:var(--r);}
+.proj-card-badge.neutral{background:var(--a-soft);border-color:var(--a-border);color:var(--a);}
+.proj-track{
+  height:8px;border-radius:4px;
+  background:rgba(255,255,255,.06);
+  position:relative;overflow:visible;
+  margin-bottom:8px;
+}
+.proj-fill-real{
+  height:100%;border-radius:4px;
+  position:absolute;top:0;left:0;
+  transition:width .9s cubic-bezier(.4,0,.2,1);
+  z-index:2;
+}
+.proj-fill-proj{
+  height:100%;border-radius:4px;
+  position:absolute;top:0;left:0;
+  opacity:.30;
+  transition:width .9s cubic-bezier(.4,0,.2,1) .05s;
+  z-index:1;
+}
+.proj-budget-mark{
+  position:absolute;top:-3px;bottom:-3px;width:2px;
+  border-radius:2px;z-index:3;
+}
+.proj-labels{
+  display:flex;justify-content:space-between;
+  font-size:10px;color:var(--text-3);font-weight:500;
+}
+.proj-labels span{font-weight:700;}
 .proj-badge{display:inline-flex;align-items:center;gap:6px;padding:5px 11px;border-radius:var(--rad-pill);background:var(--a-soft);border:1px solid var(--a-border);font-size:11px;font-weight:700;color:var(--a);margin-top:10px;}
+
+/* ── Nota de voz ── */
+.desc-row{display:flex;gap:8px;align-items:flex-start;}
+.desc-row .inp{flex:1;}
+.voice-btn{
+  width:44px;height:44px;flex-shrink:0;
+  border-radius:var(--rad-md);border:1px solid var(--border-1);
+  background:var(--surface-1);
+  display:flex;align-items:center;justify-content:center;
+  font-size:20px;cursor:pointer;
+  transition:all .18s cubic-bezier(.34,1.56,.64,1);
+}
+.voice-btn:hover{border-color:var(--border-2);background:var(--surface-2);}
+.voice-btn:active{transform:scale(.88);}
+.voice-btn.recording{
+  background:var(--r-soft);border-color:var(--r-border);
+  animation:voicePulse 1s ease-in-out infinite;
+}
+@keyframes voicePulse{
+  0%,100%{box-shadow:0 0 0 0 rgba(255,64,96,.4);}
+  50%{box-shadow:0 0 0 8px rgba(255,64,96,0);}
+}
+.voice-btn.ok{background:var(--g-soft);border-color:var(--g-border);}
+.voice-listening-lbl{
+  font-size:10px;color:var(--r);font-weight:600;
+  letter-spacing:.04em;text-align:center;
+  margin-top:4px;min-height:14px;
+  transition:opacity .2s;
+}
 /* Custom cat manage */
 .cat-manage-row{display:flex;align-items:center;gap:10px;padding:11px 0;border-bottom:1px solid var(--border-0);}
 .cat-manage-row:last-child{border-bottom:none;}
@@ -2122,7 +2189,14 @@ html.light .goal-card{background:var(--surface-1);border-color:var(--border-1);}
           <div class="flbl">¿En qué?</div>
           <div class="cat-grid" id="cat-chips"></div>
         </div>
-        <div><div class="flbl">Descripción <span style="color:var(--text-3);font-weight:500;text-transform:none;letter-spacing:0">(opcional)</span></div><input class="inp" type="text" id="e-desc" placeholder="Ej: Almuerzo con Mati…"/></div>
+        <div>
+          <div class="flbl">Descripción <span style="color:var(--text-3);font-weight:500;text-transform:none;letter-spacing:0">(opcional)</span></div>
+          <div class="desc-row">
+            <input class="inp" type="text" id="e-desc" placeholder="Ej: Almuerzo con Mati…"/>
+            <button class="voice-btn" id="voice-btn" onclick="toggleVoice()" title="Nota de voz">🎙️</button>
+          </div>
+          <div class="voice-listening-lbl" id="voice-lbl"></div>
+        </div>
         <div><div class="flbl">Fecha</div><input class="inp" type="date" id="e-date"/></div>
         <div>
           <div class="flbl">Etiquetas <span style="color:var(--text-3);font-weight:500;text-transform:none;letter-spacing:0;">(opcional)</span></div>
@@ -2743,6 +2817,71 @@ function buildTagChips(){
   });
 }
 
+// ═══════════════ NOTA DE VOZ ═══════════════
+let _voiceRecog=null;
+let _voiceActive=false;
+
+function toggleVoice(){
+  const btn=document.getElementById('voice-btn');
+  const lbl=document.getElementById('voice-lbl');
+  const inp=document.getElementById('e-desc');
+
+  // Si no hay soporte, aviso y salgo
+  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!SR){
+    toast('Tu navegador no soporta reconocimiento de voz');
+    return;
+  }
+
+  if(_voiceActive){
+    // Detener
+    _voiceRecog&&_voiceRecog.stop();
+    return;
+  }
+
+  _voiceRecog=new SR();
+  _voiceRecog.lang='es-AR';
+  _voiceRecog.continuous=false;
+  _voiceRecog.interimResults=true;
+  _voiceRecog.maxAlternatives=1;
+
+  _voiceActive=true;
+  btn.classList.add('recording');
+  btn.textContent='⏹️';
+  lbl.textContent='Escuchando…';
+
+  _voiceRecog.onresult=(e)=>{
+    const transcript=e.results[0][0].transcript;
+    inp.value=transcript;
+    if(e.results[0].isFinal){
+      btn.classList.remove('recording');
+      btn.classList.add('ok');
+      btn.textContent='✅';
+      lbl.textContent='';
+      _voiceActive=false;
+      setTimeout(()=>{btn.classList.remove('ok');btn.textContent='🎙️';},1800);
+    }
+  };
+  _voiceRecog.onerror=(e)=>{
+    btn.classList.remove('recording');
+    btn.textContent='🎙️';
+    lbl.textContent='';
+    _voiceActive=false;
+    if(e.error==='not-allowed')toast('Permiso de micrófono denegado');
+    else if(e.error!=='aborted')toast('No se pudo escuchar, intentá de nuevo');
+  };
+  _voiceRecog.onend=()=>{
+    if(_voiceActive){
+      btn.classList.remove('recording');
+      btn.textContent='🎙️';
+      lbl.textContent='';
+      _voiceActive=false;
+    }
+  };
+
+  _voiceRecog.start();
+}
+
 // ═══════════════ SAVES ═══════════════
 function saveIncome(){const el=document.getElementById('cfg-income');if(!el)return;income=Number(el.value)||0;sv('income',income);renderCfg();renderHome();toast('Sueldo guardado ✓');}
 function saveSuper(){superBudget=Number(document.getElementById('cfg-super').value)||0;sv('superBudget',superBudget);renderCfg();renderHome();toast('Presupuesto super guardado ✓');}
@@ -2773,6 +2912,12 @@ function _doSaveExp(amount,desc,date,recurring){
   dailyExp.push({id:Date.now(),cat:selCat,desc,amount,date,recurring,tags:[...selTags]});sv('daily',dailyExp);
   document.getElementById('e-amount').value='';document.getElementById('e-desc').value='';
   selTags=[];
+  // Reset voz si estaba activa
+  if(_voiceActive&&_voiceRecog){_voiceRecog.stop();}
+  const vBtn=document.getElementById('voice-btn');
+  const vLbl=document.getElementById('voice-lbl');
+  if(vBtn){vBtn.classList.remove('recording','ok');vBtn.textContent='🎙️';}
+  if(vLbl)vLbl.textContent='';
   const rec=document.getElementById('e-recurring');rec.checked=false;rec.dispatchEvent(new Event('change'));
 
   // ── Micro-animación: checkmark + partículas + háptico ──
@@ -2807,26 +2952,28 @@ function _doSaveExp(amount,desc,date,recurring){
 }
 function delExp(id){dailyExp=dailyExp.filter(e=>e.id!==id);sv('daily',dailyExp);renderAdd();renderHome();}
 async function clearAll(){
-  if(!confirm('¿Borrar todos los datos? Empezás de cero.'))return;
-  // 1. Limpiar caché del Service Worker
+  if(!confirm('¿Borrar todos los datos? Esto también limpiará el caché de la app.'))return;
+  // 1. Borrar localStorage
+  localStorage.clear();
+  // 2. Limpiar caché del Service Worker
   if('caches' in window){
     try{
       const keys = await caches.keys();
       await Promise.all(keys.map(k=>caches.delete(k)));
     }catch(e){console.warn('Cache clear error:',e);}
   }
-  // 2. Desregistrar Service Worker
+  // 3. Desregistrar Service Worker
   if('serviceWorker' in navigator){
     try{
       const regs = await navigator.serviceWorker.getRegistrations();
       await Promise.all(regs.map(r=>r.unregister()));
     }catch(e){console.warn('SW unregister error:',e);}
   }
-  // 3. Borrar localStorage y dejar solo la flag que evita que vuelvan los datos demo
-  localStorage.clear();
-  sv('app-used', true);
-  // 4. Recargar
-  setTimeout(()=>location.reload(),300);
+  // 4. Resetear estado en memoria
+  income=0;superBudget=0;fixedExp=[];dailyExp=[];incomeSources=[];goals=[];catBudgets={};
+  renderHome();renderCfg();
+  // 5. Recargar para que el SW se vuelva a registrar limpio
+  setTimeout(()=>location.reload(),400);
 }
 
 // ═══════════════ CALC ═══════════════
@@ -4018,36 +4165,63 @@ function renderHeroProjection(cur, now){
   const totalDays=new Date(now.getFullYear(),now.getMonth()+1,0).getDate();
   const daysLeft=totalDays-dayOfMonth;
 
-  // Need at least 3 days of data and not last day of month
-  if(dayOfMonth<3||daysLeft===0){el.innerHTML='';return;}
+  if(dayOfMonth<3||daysLeft===0||cur.income===0){el.innerHTML='';return;}
 
-  // Project total variable spend (non-super) at current daily rate
+  const inc=cur.income;
   const dailyRate=cur.nonSuperSpent/dayOfMonth;
   const projectedVariable=Math.round(dailyRate*totalDays);
-  const projectedTotal=projectedVariable+cur.fixedTot+(superBudget>0?superBudget:0);
-  const projectedLeftFree=income-cur.fixedTot-superBudget-projectedVariable;
+  const projectedTotal=projectedVariable+cur.fixedTot+(superBudget>0?superBudget:cur.superSpent||0);
+  const projectedLeft=inc-projectedTotal;
 
-  // Don't show if income not set
-  if(income===0){el.innerHTML='';return;}
-
-  // Color logic: green = finishing well, amber = close, red = going over
-  let cls,ico,msg;
-  if(projectedLeftFree>=0){
-    const savePct=Math.round(projectedLeftFree/income*100);
-    if(projectedLeftFree>cur.freePool*0.3){
-      cls='better';ico='📉';
-      msg=`A este ritmo terminás con <strong>${fmt(projectedLeftFree)}</strong> de sobra`;
+  // Determinar estado
+  let cls,badge,barColor,msg;
+  const pct=Math.round(projectedTotal/inc*100);
+  if(projectedLeft>=0){
+    if(projectedLeft>inc*0.15){
+      cls='better';badge='↓ Vas bien';barColor='var(--g)';
+      msg='Te sobrarían <strong>'+fmt(projectedLeft)+'</strong> al cerrar el mes';
     } else {
-      cls='neutral';ico='📊';
-      msg=`Proyección fin de mes: <strong>${fmt(projectedLeftFree)}</strong> disponible`;
+      cls='neutral';badge='≈ Justo';barColor='var(--a)';
+      msg='Terminarías con <strong>'+fmt(projectedLeft)+'</strong> de margen';
     }
   } else {
-    const over=Math.abs(projectedLeftFree);
-    cls='worse';ico='📈';
-    msg=`A este ritmo te pasarías <strong>${fmt(over)}</strong> del presupuesto`;
+    cls='worse';badge='↑ Te pasás';barColor='var(--r)';
+    msg='A este ritmo te excederías en <strong>'+fmt(Math.abs(projectedLeft))+'</strong>';
   }
 
-  el.innerHTML=`<div class="hero-proj ${cls}">${ico} ${msg}</div>`;
+  // Ancla del 100% = ingreso total
+  const realPct=Math.min(100,Math.round(projectedTotal/inc*100));  // barra real: gasto actual
+  const realNow=Math.min(100,Math.round((cur.spentTot+cur.fixedTot)/inc*100));
+  const projPct=Math.min(120,realPct); // proyectado puede pasar el 100%
+  // Cap visual al 100% pero la barra projected puede tener color de desborde
+  const realW=Math.min(100,realNow);
+  const projW=Math.min(100,realPct);
+
+  el.innerHTML=`
+  <div class="proj-card">
+    <div class="proj-card-header">
+      <div class="proj-card-title">📅 Proyección fin de mes</div>
+      <div class="proj-card-badge ${cls}">${badge}</div>
+    </div>
+    <div class="proj-track" id="proj-track">
+      <div class="proj-fill-proj" id="proj-fill-proj" style="width:0%;background:${barColor}"></div>
+      <div class="proj-fill-real" id="proj-fill-real" style="width:0%;background:${barColor}"></div>
+      <div class="proj-budget-mark" style="left:100%;background:var(--text-3);opacity:.5"></div>
+    </div>
+    <div class="proj-labels">
+      <div>Hoy <span style="color:${barColor}">${fmt(cur.spentTot+cur.fixedTot)}</span></div>
+      <div>Proyectado <span style="color:${barColor}">${fmt(projectedTotal)}</span> / ${fmt(inc)}</div>
+    </div>
+    <div style="font-size:11.5px;color:var(--text-2);margin-top:9px;line-height:1.55;font-weight:500">${msg} — quedan ${daysLeft} días.</div>
+  </div>`;
+
+  // Animar barras después de render
+  setTimeout(()=>{
+    const pr=document.getElementById('proj-fill-real');
+    const pp=document.getElementById('proj-fill-proj');
+    if(pr)pr.style.width=realW+'%';
+    if(pp)pp.style.width=projW+'%';
+  },60);
 }
 
 
@@ -4180,10 +4354,7 @@ function checkPwaReminder(){
 // ═══════════════ INIT ═══════════════
 buildChips('fc-chips',FCATS,'tarjeta',id=>selFCat=id);
 
-// Los datos de demo solo se cargan la PRIMERA vez que alguien abre la app.
-// Una vez que el usuario borra todo (clearAll), se guarda 'app-used' y nunca más se vuelven a inyectar.
-if(dailyExp.length===0&&income===0&&!ld('app-used',false)){
-  sv('app-used',true);
+if(dailyExp.length===0&&income===0){
   income=817314;superBudget=125000;sv('income',income);sv('superBudget',superBudget);
   fixedExp=[{id:1,cat:'tarjeta',name:'Tarjeta de crédito',amount:200000},{id:2,cat:'luz',name:'Luz',amount:33000},{id:3,cat:'internet',name:'Internet',amount:20000},{id:4,cat:'streaming',name:'Netflix',amount:16000}];
   const now=new Date(),mk=mkey(now),prevMk=mkey(new Date(now.getFullYear(),now.getMonth()-1,1));
