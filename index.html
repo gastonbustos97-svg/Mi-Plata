@@ -13,8 +13,212 @@
 <link rel="icon" type="image/png" sizes="32x32" href="favicon.ico"/>
 <link rel="apple-touch-icon" href="icon-192.png"/>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<!-- Firebase -->
+<script type="module">
+// ══════════════════════════════════════════════════════════════
+//  FIREBASE CONFIG — reemplazá con tu propio proyecto en
+//  https://console.firebase.google.com → Project Settings → Web
+// ══════════════════════════════════════════════════════════════
+import { initializeApp }               from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
+import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged }
+                                        from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
+import { getFirestore, doc, setDoc, getDoc, enableIndexedDbPersistence, collection, onSnapshot, writeBatch }
+                                        from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
+
+const firebaseConfig = {
+  apiKey: "AIzaSyCECpNRPDwfGUxpG0kESUl-vZXM1jCgQBg",
+  authDomain: "mi-plata-e4111.firebaseapp.com",
+  projectId: "mi-plata-e4111",
+  storageBucket: "mi-plata-e4111.firebasestorage.app",
+  messagingSenderId: "550544601503",
+  appId: "1:550544601503:web:20c6eed47fe4e59cd08daa"
+};
+
+// ─── Init ────────────────────────────────────────────────────
+let _app, _auth, _db, _unsubSnapshot = null;
+
+async function fbInit() {
+  try {
+    _app  = initializeApp(FIREBASE_CONFIG);
+    _auth = getAuth(_app);
+    _db   = getFirestore(_app);
+
+    // Modo offline nativo — persiste en IndexedDB
+    try {
+      await enableIndexedDbPersistence(_db);
+      console.log('[FB] Offline persistence ✓');
+    } catch (e) {
+      if (e.code === 'failed-precondition') console.warn('[FB] Offline: múltiples tabs abiertas');
+      else if (e.code === 'unimplemented')  console.warn('[FB] Offline: navegador no soportado');
+    }
+
+    // Escuchar cambios de auth
+    onAuthStateChanged(_auth, user => {
+      window._fbUser = user || null;
+      if (user) {
+        fbStartSync(user.uid);
+        updateAuthUI(user);
+      } else {
+        fbStopSync();
+        updateAuthUI(null);
+      }
+    });
+
+    window._fbReady = true;
+    console.log('[FB] Firebase inicializado ✓');
+  } catch (e) {
+    console.error('[FB] Error al inicializar:', e);
+    window._fbReady = false;
+  }
+}
+
+// ─── Auth ────────────────────────────────────────────────────
+window.fbSignIn = async function() {
+  if (!_auth) return;
+  try {
+    const provider = new GoogleAuthProvider();
+    await signInWithPopup(_auth, provider);
+  } catch (e) {
+    if (e.code !== 'auth/popup-closed-by-user')
+      console.error('[FB] Login error:', e);
+  }
+};
+
+window.fbSignOut = async function() {
+  if (!_auth) return;
+  if (_unsubSnapshot) { _unsubSnapshot(); _unsubSnapshot = null; }
+  await signOut(_auth);
+  window._fbUser = null;
+  updateAuthUI(null);
+};
+
+// ─── Sync ────────────────────────────────────────────────────
+const DATA_KEYS = ['income','superBudget','fixed','daily','catBudgets','incomeSources','goals','customCats','catBudgetThresholds','budgetAlertHistory'];
+
+async function fbStartSync(uid) {
+  const ref = doc(_db, 'users', uid, 'app', 'data');
+
+  // 1. Cargar snapshot remoto UNA vez al conectar
+  try {
+    const snap = await getDoc(ref);
+    if (snap.exists()) {
+      const remote = snap.data();
+      // Merge: si el remoto es más reciente (tiene más datos), usarlo
+      const localTotal  = (window._localDailyCount   || 0);
+      const remoteTotal = (remote.daily?.length       || 0);
+      if (remoteTotal > localTotal) {
+        DATA_KEYS.forEach(k => {
+          if (remote[k] !== undefined) {
+            localStorage.setItem(k, JSON.stringify(remote[k]));
+          }
+        });
+        // Recargar datos en memoria
+        if (typeof window.fbReloadAll === 'function') window.fbReloadAll();
+        console.log('[FB] Datos remotos cargados ✓');
+      }
+    }
+  } catch (e) {
+    console.warn('[FB] Sin conexión — usando datos locales:', e.message);
+  }
+
+  // 2. Escuchar cambios en tiempo real (funciona offline también)
+  _unsubSnapshot = onSnapshot(ref, { includeMetadataChanges: false }, snap => {
+    if (!snap.exists()) return;
+    const remote = snap.data();
+    const fromCache = snap.metadata.fromCache;
+    if (!fromCache) {
+      // Datos frescos del servidor → actualizar local si hay diferencias
+      let changed = false;
+      DATA_KEYS.forEach(k => {
+        if (remote[k] !== undefined) {
+          const local = localStorage.getItem(k);
+          const remStr = JSON.stringify(remote[k]);
+          if (local !== remStr) {
+            localStorage.setItem(k, remStr);
+            changed = true;
+          }
+        }
+      });
+      if (changed && typeof window.fbReloadAll === 'function') {
+        window.fbReloadAll();
+      }
+    }
+  }, err => {
+    if (err.code !== 'permission-denied')
+      console.warn('[FB] Snapshot error:', err.message);
+  });
+}
+
+function fbStopSync() {
+  if (_unsubSnapshot) { _unsubSnapshot(); _unsubSnapshot = null; }
+}
+
+// Guardar todos los datos del usuario a Firestore
+window.fbSave = async function(payload) {
+  if (!_auth?.currentUser || !_db) return;
+  const uid = _auth.currentUser.uid;
+  try {
+    await setDoc(doc(_db, 'users', uid, 'app', 'data'), payload, { merge: true });
+  } catch (e) {
+    // Sin conexión → Firestore encola automáticamente en IndexedDB
+    console.log('[FB] Guardado en cola offline');
+  }
+};
+
+// ─── UI helpers (se rellenan desde el script principal) ──────
+function updateAuthUI(user) {
+  // Se llama cuando cambia el estado de auth
+  if (typeof window._onFbAuthChange === 'function') window._onFbAuthChange(user);
+}
+
+// Arrancar
+fbInit();
+</script>
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet"/>
 <style>
+/* ══════════════════════════════════════
+   FIREBASE AUTH UI
+══════════════════════════════════════ */
+.fb-user-chip{
+  display:flex;align-items:center;gap:8px;
+  background:var(--surface-1);border:1px solid var(--border-1);
+  border-radius:var(--rad-pill);padding:5px 12px 5px 7px;
+  cursor:pointer;transition:border-color .2s,background .2s;
+  font-size:12px;font-weight:600;color:var(--text-2);
+  max-width:160px;position:relative;
+}
+.fb-user-chip:hover{border-color:var(--border-2);background:var(--surface-2);}
+.fb-user-avatar{width:24px;height:24px;border-radius:50%;object-fit:cover;flex-shrink:0;border:1px solid var(--border-1);}
+.fb-user-avatar-placeholder{width:24px;height:24px;border-radius:50%;background:var(--g-soft);border:1px solid var(--g-border);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;color:var(--g);flex-shrink:0;}
+.fb-user-name{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100px;}
+.fb-sync-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0;background:var(--g);box-shadow:0 0 6px var(--g);animation:livePulse 2.4s ease-in-out infinite;}
+.fb-sync-dot.offline{background:var(--a);box-shadow:0 0 6px var(--a);}
+.fb-sync-dot.error{background:var(--r);box-shadow:0 0 6px var(--r);animation:none;}
+.fb-login-btn{
+  display:flex;align-items:center;gap:8px;
+  background:var(--surface-1);border:1px solid var(--border-1);
+  border-radius:var(--rad-pill);padding:6px 14px 6px 10px;
+  cursor:pointer;transition:border-color .2s,background .2s,transform .2s;
+  font-size:12px;font-weight:700;color:var(--text-1);white-space:nowrap;
+}
+.fb-login-btn:hover{border-color:var(--border-2);background:var(--surface-2);transform:translateY(-1px);}
+.fb-login-btn:active{transform:scale(.96);}
+.fb-dropdown{
+  position:absolute;top:calc(100% + 8px);right:0;
+  background:rgba(10,14,28,.96);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);
+  border:1px solid var(--border-2);border-radius:var(--rad-md);
+  padding:8px;min-width:200px;box-shadow:var(--sh-float);z-index:9999;
+  animation:fbDdIn .18s cubic-bezier(.22,.68,0,1.15);
+}
+@keyframes fbDdIn{from{opacity:0;transform:translateY(-6px) scale(.96);}to{opacity:1;transform:none;}}
+.fb-dropdown-email{font-size:11px;color:var(--text-3);font-weight:500;padding:6px 10px 8px;border-bottom:1px solid var(--border-0);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.fb-dropdown-item{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:var(--rad-sm);font-size:13px;font-weight:600;color:var(--text-2);cursor:pointer;transition:background .15s,color .15s;}
+.fb-dropdown-item:hover{background:var(--surface-2);color:var(--text-1);}
+.fb-dropdown-item.danger{color:var(--r);}
+.fb-dropdown-item.danger:hover{background:var(--r-soft);}
+.fb-offline-bar{background:rgba(255,179,64,.12);border-bottom:1px solid rgba(255,179,64,.20);padding:6px 16px;font-size:11px;font-weight:600;color:var(--a);display:none;align-items:center;gap:8px;justify-content:center;letter-spacing:.02em;flex-shrink:0;}
+.fb-offline-bar.show{display:flex;}
+
 /* ══════════════════════════════════════
    TOKENS
 ══════════════════════════════════════ */
@@ -2569,10 +2773,41 @@ html.light .push-notif-inner{
         <span id="hdr-month"></span>
       </div>
     </div>
+    <!-- Firebase Auth Widget -->
+    <div id="fb-auth-widget">
+      <button class="fb-login-btn" id="fb-login-btn" onclick="fbSignIn()" title="Sincronizar con Google">
+        <svg width="16" height="16" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+        Sincronizar
+      </button>
+      <div class="fb-user-chip" id="fb-user-chip" style="display:none" onclick="fbToggleDropdown()">
+        <div class="fb-user-avatar-placeholder" id="fb-avatar-placeholder">?</div>
+        <img class="fb-user-avatar" id="fb-avatar-img" src="" alt="" style="display:none"/>
+        <span class="fb-user-name" id="fb-user-name">Usuario</span>
+        <div class="fb-sync-dot" id="fb-sync-dot"></div>
+        <!-- Dropdown -->
+        <div class="fb-dropdown" id="fb-dropdown" style="display:none" onclick="event.stopPropagation()">
+          <div class="fb-dropdown-email" id="fb-dropdown-email">—</div>
+          <div class="fb-dropdown-item" onclick="fbForcePush()">
+            <span>☁️</span> Subir datos locales
+          </div>
+          <div class="fb-dropdown-item" onclick="fbForcePull()">
+            <span>📥</span> Bajar datos de la nube
+          </div>
+          <div class="fb-dropdown-item danger" onclick="fbSignOut();fbCloseDropdown()">
+            <span>🚪</span> Cerrar sesión
+          </div>
+        </div>
+      </div>
+    </div>
     <button class="add-btn" onclick="go('add',null)" aria-label="Anotar nuevo gasto">
       <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M6 1v10M1 6h10" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>
       Anotar
     </button>
+  </div>
+
+  <!-- Barra offline -->
+  <div class="fb-offline-bar" id="fb-offline-bar">
+    ☁️ Sin conexión — los datos se guardan localmente y se sincronizan al reconectar
   </div>
 
   <div class="scroll">
@@ -3311,7 +3546,8 @@ const FCATS=[
 const TAGS_DEF=['salida con amigos','trabajo','urgente','familia','ocio','compras','online','cuotas'];
 
 const ld=(k,d)=>{try{return JSON.parse(localStorage.getItem(k))??d;}catch{return d;}};
-const sv=(k,v)=>localStorage.setItem(k,JSON.stringify(v));
+// sv es var para que Firebase pueda sobreescribirla con sync automático
+var sv=(k,v)=>localStorage.setItem(k,JSON.stringify(v));
 const DEFAULT_CATS=[
   {id:'super',      label:'Súper 🛒',        color:'#3D8EFF',system:true},
   {id:'verduleria', label:'Verdulería 🥦',   color:'#5DBB4A',system:true},
@@ -5836,6 +6072,158 @@ let _installEvt=null;
     btn.classList.remove('show');_installEvt=null;
   });
 })();
+
+// ═══════════════ FIREBASE INTEGRATION ═══════════════
+// Contar datos locales para comparar con remoto en sync
+window._localDailyCount = dailyExp.length;
+
+// Recargar todos los datos desde localStorage (llamado al bajar datos de la nube)
+window.fbReloadAll = function(){
+  income        = ld('income',0);
+  superBudget   = ld('superBudget',0);
+  fixedExp      = ld('fixed',[]);
+  dailyExp      = ld('daily',[]);
+  catBudgets    = ld('catBudgets',{});
+  incomeSources = ld('incomeSources',[]);
+  goals         = ld('goals',[]);
+  window._localDailyCount = dailyExp.length;
+  reloadCats();
+  _skRevealed = false;
+  _anaRevealed = false;
+  renderHome();
+  renderCfg();
+  toast('✓ Datos sincronizados desde la nube');
+};
+
+// Construir payload para Firestore a partir del estado en memoria
+function fbBuildPayload(){
+  return {
+    income, superBudget,
+    fixed:         fixedExp,
+    daily:         dailyExp,
+    catBudgets,
+    incomeSources,
+    goals,
+    customCats:    ld('customCats',[]),
+    catBudgetThresholds,
+    budgetAlertHistory,
+    _updatedAt:    Date.now(),
+    _version:      1,
+  };
+}
+
+// Hook: interceptar sv() para también guardar en Firebase
+// Override sv para sincronizar automáticamente
+sv = function(k, v){
+  localStorage.setItem(k, JSON.stringify(v));
+  // Debounce Firebase write — esperar 800ms de inactividad
+  if(window._fbReady && window._fbUser){
+    clearTimeout(window._fbWriteTimer);
+    window._fbWriteTimer = setTimeout(async () => {
+      try {
+        await window.fbSave(fbBuildPayload());
+        fbSetSyncDot('ok');
+      } catch(e){
+        fbSetSyncDot('offline');
+      }
+    }, 800);
+  }
+};
+
+// Dot de sincronización
+function fbSetSyncDot(state){
+  const dot = document.getElementById('fb-sync-dot');
+  if(!dot) return;
+  dot.className = 'fb-sync-dot' + (state==='offline'?' offline':state==='error'?' error':'');
+}
+
+// Subir datos locales a la nube manualmente
+window.fbForcePush = async function(){
+  fbCloseDropdown();
+  if(!window._fbUser){ toast('Iniciá sesión primero'); return; }
+  try {
+    await window.fbSave(fbBuildPayload());
+    toast('☁️ Datos subidos a la nube ✓');
+    fbSetSyncDot('ok');
+  } catch(e) {
+    toast('Error al subir datos');
+  }
+};
+
+// Bajar datos de la nube manualmente
+window.fbForcePull = async function(){
+  fbCloseDropdown();
+  if(!window._fbUser){ toast('Iniciá sesión primero'); return; }
+  if(!window._fbReady){ toast('Firebase no disponible'); return; }
+  toast('Bajando datos...');
+  // Disparar reload forzado
+  if(typeof window.fbReloadAll === 'function') window.fbReloadAll();
+};
+
+// Dropdown toggle
+window.fbToggleDropdown = function(){
+  const dd = document.getElementById('fb-dropdown');
+  if(!dd) return;
+  dd.style.display = dd.style.display==='none' ? 'block' : 'none';
+  // Cerrar al hacer click afuera
+  if(dd.style.display==='block'){
+    setTimeout(()=>document.addEventListener('click', fbCloseDropdownOutside, {once:true}), 50);
+  }
+};
+function fbCloseDropdownOutside(){ fbCloseDropdown(); }
+window.fbCloseDropdown = function(){
+  const dd=document.getElementById('fb-dropdown');
+  if(dd) dd.style.display='none';
+};
+
+// Callback de cambio de auth (llamado desde el módulo Firebase)
+window._onFbAuthChange = function(user){
+  const loginBtn   = document.getElementById('fb-login-btn');
+  const userChip   = document.getElementById('fb-user-chip');
+  const userName   = document.getElementById('fb-user-name');
+  const avatarImg  = document.getElementById('fb-avatar-img');
+  const avatarPh   = document.getElementById('fb-avatar-placeholder');
+  const emailEl    = document.getElementById('fb-dropdown-email');
+
+  if(user){
+    // Mostrar chip de usuario
+    if(loginBtn)  loginBtn.style.display  = 'none';
+    if(userChip)  userChip.style.display  = 'flex';
+    if(userName)  userName.textContent    = user.displayName?.split(' ')[0] || 'Usuario';
+    if(emailEl)   emailEl.textContent     = user.email || '';
+    if(user.photoURL && avatarImg){
+      avatarImg.src = user.photoURL;
+      avatarImg.style.display = 'block';
+      if(avatarPh) avatarPh.style.display = 'none';
+    } else if(avatarPh){
+      avatarPh.textContent = (user.displayName||'?')[0].toUpperCase();
+    }
+    fbSetSyncDot('ok');
+    toast('✓ Conectado como '+( user.displayName?.split(' ')[0] || user.email));
+  } else {
+    // Mostrar botón login
+    if(loginBtn)  loginBtn.style.display  = 'flex';
+    if(userChip)  userChip.style.display  = 'none';
+  }
+};
+
+// Detectar online/offline
+window.addEventListener('online',  ()=>{
+  document.getElementById('fb-offline-bar')?.classList.remove('show');
+  fbSetSyncDot('ok');
+  // Intentar flush de escrituras pendientes
+  if(window._fbReady && window._fbUser){
+    setTimeout(()=>window.fbSave(fbBuildPayload()), 500);
+  }
+});
+window.addEventListener('offline', ()=>{
+  document.getElementById('fb-offline-bar')?.classList.add('show');
+  fbSetSyncDot('offline');
+});
+// Estado inicial
+if(!navigator.onLine){
+  document.getElementById('fb-offline-bar')?.classList.add('show');
+}
 
 </script>
 </body>
