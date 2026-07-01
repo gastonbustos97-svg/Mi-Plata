@@ -65,3 +65,16 @@ self.addEventListener('fetch', e => {
 self.addEventListener('message', e => {
   if (e.data === 'skipWaiting') self.skipWaiting();
 });
+
+// Tap en notificación de recordatorio diario → abrir app en pantalla de carga rápida
+self.addEventListener('notificationclick', e => {
+  e.notification.close();
+  const url = self.registration.scope + '?action=add';
+  e.waitUntil(
+    clients.matchAll({type:'window',includeUncontrolled:true}).then(list => {
+      const existing = list.find(c => c.url.startsWith(self.registration.scope));
+      if(existing) return existing.focus().then(c => c.navigate(url));
+      return clients.openWindow(url);
+    })
+  );
+});

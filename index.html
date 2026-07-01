@@ -3245,6 +3245,20 @@ html.light .push-notif-inner{
     <div class="fcard" id="cat-manage-list"></div>
     <button class="btn btn-ghost" style="margin-bottom:12px" onclick="openAddCatModal()">＋ Nueva categoría</button>
 
+    <div class="sec">Recordatorio diario</div>
+    <div class="fcard">
+      <div class="toggle-row" id="notif-row" onclick="toggleDailyNotif()" style="cursor:pointer;user-select:none">
+        <div class="toggle-track" style="pointer-events:none">
+          <div class="toggle-bg" id="notif-tog-bg"></div>
+          <div class="toggle-knob" id="notif-tog-knob"></div>
+        </div>
+        <div style="pointer-events:none">
+          <div class="toggle-text-main" id="notif-tog-label">Recordatorio desactivado</div>
+          <div class="toggle-text-sub">Te avisa a las 21 hs si no cargaste gastos</div>
+        </div>
+      </div>
+    </div>
+
     <div class="sec">Apariencia</div>
     <div class="fcard">
       <div class="toggle-row" onclick="toggleTheme()" style="cursor:pointer;user-select:none">
@@ -4998,6 +5012,7 @@ function renderCfg(){
   document.getElementById('cfg-super').value=superBudget||'';
   renderCatManageList();
   applyTheme();
+  setTimeout(()=>applyNotifToggleUI(ld('daily-notif-on',false)),0);
   // Cat budgets in settings
   const now=new Date(),mk2=mkey(now);
   const mExp=dailyExp.filter(e=>e.date.startsWith(mk2));
@@ -5606,6 +5621,73 @@ function checkPwaReminder(){
   }
 }
 
+// ═══════════════ DAILY REMINDER ═══════════════
+function applyNotifToggleUI(enabled){
+  const bg=document.getElementById('notif-tog-bg');
+  const knob=document.getElementById('notif-tog-knob');
+  const lbl=document.getElementById('notif-tog-label');
+  if(!bg)return;
+  bg.style.background=enabled?'var(--a)':'';
+  knob.style.transform=enabled?'translateX(22px)':'';
+  lbl.textContent=enabled?'Recordatorio activado (21 hs)':'Recordatorio desactivado';
+}
+
+async function toggleDailyNotif(){
+  const cur=ld('daily-notif-on',false);
+  if(!cur){
+    if(!('Notification' in window)){toast('Tu navegador no soporta notificaciones');return;}
+    const perm=await Notification.requestPermission();
+    if(perm!=='granted'){toast('Permiso denegado. Activalo en ajustes del celular.');return;}
+    sv('daily-notif-on',true);
+    applyNotifToggleUI(true);
+    toast('🔔 Recordatorio activado para las 21 hs');
+    scheduleDailyReminder();
+  } else {
+    sv('daily-notif-on',false);
+    applyNotifToggleUI(false);
+    const tid=ld('daily-notif-tid',null);
+    if(tid)clearTimeout(tid);
+    toast('Recordatorio desactivado');
+  }
+}
+
+function scheduleDailyReminder(){
+  if(!ld('daily-notif-on',false))return;
+  if(Notification.permission!=='granted')return;
+  const tid=ld('daily-notif-tid',null);
+  if(tid)clearTimeout(tid);
+  const now=new Date();
+  const fire=new Date(now);
+  fire.setHours(21,0,0,0);
+  if(now>=fire)fire.setDate(fire.getDate()+1);
+  const ms=fire-now;
+  const t=setTimeout(async()=>{
+    const todayKey=new Date().toISOString().split('T')[0];
+    const fired=ld('notif-fired-'+todayKey,false);
+    if(fired)return;
+    const todayExps=dailyExp.filter(e=>e.date===todayKey);
+    if(todayExps.length===0){
+      const reg=await navigator.serviceWorker.ready;
+      reg.showNotification('Mi Plata 💸',{
+        body:'No registraste gastos hoy. ¿Qué compraste?',
+        icon:'./icon-192.png',
+        badge:'./icon-192.png',
+        data:{action:'add'}
+      });
+      sv('notif-fired-'+todayKey,true);
+    }
+    scheduleDailyReminder(); // programar para mañana
+  },ms);
+  sv('daily-notif-tid',t);
+}
+
+// Al arrancar, retomar programación si está activado
+if(ld('daily-notif-on',false)&&typeof Notification!=='undefined'&&Notification.permission==='granted'){
+  scheduleDailyReminder();
+}
+// Render toggle UI al volver a la pantalla de config
+const _origRenderCfg=typeof renderCfg==='function'?renderCfg:null;
+
 // ═══════════════ INIT ═══════════════
 buildChips('fc-chips',FCATS,'tarjeta',id=>selFCat=id);
 
@@ -6028,6 +6110,14 @@ if(goals.length===0&&dailyExp.length>0){
 applyRecurring();
 applyTheme();
 renderHome();renderCfg();
+
+// Acceso directo desde ícono de la app (manifest shortcuts) → ?action=add
+const _urlParams = new URLSearchParams(location.search);
+if(_urlParams.get('action')==='add'){
+  setTimeout(()=>openQuick(),100);
+  history.replaceState(null,'',location.pathname);
+}
+
 checkMonthEnd();
 checkPwaReminder();
 checkOnboarding();
